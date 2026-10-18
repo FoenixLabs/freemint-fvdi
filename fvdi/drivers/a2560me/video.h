@@ -47,10 +47,11 @@ static int me_video_available(void)
     return !(ME_R32(ME_GAVIN) & 0x40UL) && !(ME_R32(ME_GGE) & 1UL);
 }
 
-static int me_video_enter_timing(struct me_video_state *s, unsigned short half, unsigned short height)
+static int me_video_enter_format(struct me_video_state *s, unsigned short half, unsigned short height, unsigned short depth)
 {
     volatile uint32_t *pixels;
     uint32_t count;
+    if (depth != 16 && depth != 32) return 0;
     if (s->active)
         return 1;
     if (!me_video_available())
@@ -69,21 +70,24 @@ static int me_video_enter_timing(struct me_video_state *s, unsigned short half, 
         ME_R32(ME_MASTER) = (s->master & ~ME_VIDEO1024) |
             (height == 1024 ? ME_VIDEO1024 : 0);
     pixels = ME_PIXELS;
-    count = (uint32_t)(half ? 640 : 1280) * me_height(half) / 2;
+    count = (uint32_t)(half ? 640 : 1280) * me_height(half) * (depth / 16) / 2;
     while (count--)
         *pixels++ = 0;
     ME_R32(ME_GUI) = 0;
     /* ADDR takes a byte address, not an address divided by four or 32. */
     ME_R32(ME_GUI + 4) = A2560ME_VIDEO_BASE;
-    ME_R32(ME_GUI + 12) = half ? 1280 : 2560;
+    ME_R32(ME_GUI + 12) = (half ? 640UL : 1280UL) * (depth / 8);
     ME_R16(ME_MOUSE) = s->mouse & ~1U;
     ME_R32(ME_BORDER) = 0;
-    ME_R32(ME_GUI) = half ? 5 : 13; /* enabled, RGB565, 640 or 1280 */
+    ME_R32(ME_GUI) = (half ? 5 : 13) | (depth == 32 ? 2 : 0); /* RGB565 or XRGB8888 */
     ME_R32(ME_MASTER) = (ME_R32(ME_MASTER) & ~(ME_TOSGRAPH | ME_MEMTEXT |
         0x00001403UL)) | ME_GRAPHICS;
     s->active = 1;
     return 1;
 }
+
+static int __attribute__((unused)) me_video_enter_timing(struct me_video_state *s, unsigned short half, unsigned short height)
+{ return me_video_enter_format(s,half,height,16); }
 
 /* Keep the existing automatic-timing interface for probes and recovery. */
 static int __attribute__((unused)) me_video_enter(struct me_video_state *s, unsigned short half)

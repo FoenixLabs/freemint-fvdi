@@ -16,7 +16,9 @@
 #include "../bitplane/bitplane.h"
 #include "relocate.h"
 
-#define PIXEL       short
+#ifndef PIXEL
+#define PIXEL short
+#endif
 #define PIXEL_SIZE  sizeof(PIXEL)
 
 /* destination MFDB (odd address marks table operation)

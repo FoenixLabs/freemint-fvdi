@@ -19,13 +19,17 @@ static void start(void) {
     int32_t sa=d[2]-0x800000, da=d[8]-0x800000;
     starts++;
     if(fail) { regs[1]=fail==1?1:0x14; return; }
-    assert((d[0]&0x3ff)==0x1f0 && !(regs[0]&8));
+    unsigned bytes=(d[0]&0x300)==0x200?4:2;
+    assert((d[0]&0x3ff)==(bytes==4?0x2f0:0x1f0) && !(regs[0]&8));
     for(row=0;row<h;row++) {
-        assert(da>=0 && da+2*w<=sizeof(memory));
+        assert(da>=0 && da+bytes*w<=sizeof(memory));
         if(d[0]&0x800) {
-            assert(sa>=0 && sa+2*w<=sizeof(memory));
-            memmove((char*)memory+da,(char*)memory+sa,w*2);
-        } else for(x=0;x<w;x++) memory[da/2+x]=(uint16_t)d[10];
+            assert(sa>=0 && sa+bytes*w<=sizeof(memory));
+            memmove((char*)memory+da,(char*)memory+sa,w*bytes);
+        } else for(x=0;x<w;x++) {
+            if(bytes==4) memcpy((char*)memory+da+x*4,&d[10],4);
+            else memory[da/2+x]=(uint16_t)d[10];
+        }
         sa+=(int32_t)d[3]; da+=(int32_t)d[9];
     }
     regs[1]=2;
@@ -61,6 +65,18 @@ int main(void) {
     bad=b; bad.stride=0xfffffffe; assert(!me_dma_valid(&bad));
     bad=b; bad.height=65536; assert(!me_dma_valid(&bad));
     previous=starts; assert(me_dma_run(0,&bad,0)==0 && starts==previous);
+    a.address=0x800000;a.width=32;a.height=8;a.stride=256;
+    b=a;b.address+=512;
+    assert(me_dma_run_depth(0,&a,0x123456,4)==1);
+    { uint32_t pixel; memcpy(&pixel,memory,4); assert(pixel==0x123456); }
+    memcpy(expected,memory,sizeof memory);
+    for(i=8;i;i--) memmove((char*)expected+512+(i-1)*256,(char*)expected+(i-1)*256,128);
+    assert(me_dma_run_depth(&a,&b,0,4)==1 && (regs[16]&0x20000));
+    assert(!memcmp(memory,expected,sizeof memory));
+    bad=a;bad.address+=2;assert(!me_dma_valid_depth(&bad,4));
+    bad=a;bad.address=0x3fffff80;assert(!me_dma_valid_depth(&bad,4));
+    assert(!me_dma_run_depth(0,&a,0,3));
+    previous=starts;
     regs[1]=1; assert(me_dma_run(0,&b,0)==0 && starts==previous);
     regs[1]=0; fail=1; assert(me_dma_run(0,&b,0)==-1 && aborts==1);
     fail=2; assert(me_dma_run(0,&b,0)==-1 && aborts==2);

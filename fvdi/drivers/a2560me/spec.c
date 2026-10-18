@@ -13,6 +13,8 @@
 #define ME_RENDERING
 #include "cache.h"
 #include "dma.h"
+#include "rgb24.h"
+static short pixel_depth=16;
 
 /* XaAES may restore CACR around v_opnwk. Reassert the write-through
  * RAM mappings and D-cache enable at each entry, without flushing when
@@ -39,30 +41,30 @@ static int me_rect(Workstation *wk, MFDB *m, long x, long y, long w, long h,
     }
     else
     {
-        if (m->bitplanes != 16 || m->standard || m->wdwidth <= 0)
+        if (m->bitplanes != pixel_depth || m->standard || m->wdwidth <= 0)
             return 0;
         r->address = (uint32_t)m->address;
-        r->stride = (uint32_t)m->wdwidth * 32;
+        r->stride = (uint32_t)m->wdwidth * 2 * pixel_depth;
         width = m->width; height = m->height;
     }
     if (x < 0 || y < 0 || w <= 0 || h <= 0 || x > width - w || y > height - h ||
         r->address < A2560ME_DDR_BASE || r->address >= A2560ME_DDR_TOP ||
-        r->stride < (uint32_t)width * 2 || r->stride > A2560ME_DDR_TOP ||
+        r->stride < (uint32_t)width * (pixel_depth/8) || r->stride > A2560ME_DDR_TOP ||
         (uint32_t)y > (A2560ME_DDR_TOP - r->address) / r->stride)
         return 0;
     r->address += (uint32_t)y * r->stride;
-    if ((uint32_t)x * 2 > A2560ME_DDR_TOP - r->address)
+    if ((uint32_t)x * (pixel_depth/8) > A2560ME_DDR_TOP - r->address)
         return 0;
-    r->address += x * 2;
+    r->address += x * (pixel_depth/8);
     r->width = w; r->height = h;
-    return me_dma_valid(r);
+    return me_dma_valid_depth(r,pixel_depth/8);
 }
 static long CDECL me_write_pixel(Virtual *v, MFDB *m, long x, long y, long c)
-{ me_render_cache(); return c_write_pixel(v,m,x,y,c); }
+{ me_render_cache(); return pixel_depth==32 ? c32_write_pixel(v,m,x,y,c) : c_write_pixel(v,m,x,y,c); }
 static long CDECL me_read_pixel(Virtual *v, MFDB *m, long x, long y)
-{ me_render_cache(); return c_read_pixel(v,m,x,y); }
+{ me_render_cache(); return pixel_depth==32 ? c32_read_pixel(v,m,x,y) : c_read_pixel(v,m,x,y); }
 static long CDECL me_line(Virtual *v, long x1,long y1,long x2,long y2,long p,long c,long m)
-{ me_render_cache(); return c_line_draw(v,x1,y1,x2,y2,p,c,m); }
+{ me_render_cache(); return pixel_depth==32 ? c32_line_draw(v,x1,y1,x2,y2,p,c,m) : c_line_draw(v,x1,y1,x2,y2,p,c,m); }
 static long CDECL me_fill(Virtual *v,long x,long y,long w,long h,short *p,long c,long m,long s)
 {
     struct me_dma_rect dst;
@@ -76,15 +78,15 @@ static long CDECL me_fill(Virtual *v,long x,long y,long w,long h,short *p,long c
         for (i = 0; i < 16 && (unsigned short)p[i] == 0xffff; i++) { }
         if (i == 16)
         {
-            c_get_colours(v,c,&fg,&bg);
-            if (dma_result(me_dma_run(0,&dst,(uint16_t)fg)))
+            if(pixel_depth==32) c32_get_colours(v,c,&fg,&bg); else c_get_colours(v,c,&fg,&bg);
+            if (dma_result(me_dma_run_depth(0,&dst,fg,pixel_depth/8)))
                 return 1;
         }
     }
-    return c_fill_area(v,x,y,w,h,p,c,m,s);
+    return pixel_depth==32 ? c32_fill_area(v,x,y,w,h,p,c,m,s) : c_fill_area(v,x,y,w,h,p,c,m,s);
 }
 static long CDECL me_expand(Virtual *v,MFDB *s,long sx,long sy,MFDB *d,long dx,long dy,long w,long h,long m,long c)
-{ me_render_cache(); return c_expand_area(v,s,sx,sy,d,dx,dy,w,h,m,c); }
+{ me_render_cache(); return pixel_depth==32 ? c32_expand_area(v,s,sx,sy,d,dx,dy,w,h,m,c) : c_expand_area(v,s,sx,sy,d,dx,dy,w,h,m,c); }
 static long CDECL me_blit(Virtual *v,MFDB *s,long sx,long sy,MFDB *d,long dx,long dy,long w,long h,long m)
 {
     struct me_dma_rect src, dst;
@@ -92,12 +94,12 @@ static long CDECL me_blit(Virtual *v,MFDB *s,long sx,long sy,MFDB *d,long dx,lon
     if (!dma_disabled && !((long)v & 1) && m == 3 && w >= 16 && h > 0 &&
         me_rect(v->real_address,s,sx,sy,w,h,&src) &&
         me_rect(v->real_address,d,dx,dy,w,h,&dst) &&
-        (uint32_t)w * (uint32_t)h >= 1024 && dma_result(me_dma_run(&src,&dst,0)))
+        (uint32_t)w * (uint32_t)h >= 1024 && dma_result(me_dma_run_depth(&src,&dst,0,pixel_depth/8)))
         return 1;
-    return c_blit_area(v,s,sx,sy,d,dx,dy,w,h,m);
+    return pixel_depth==32 ? c32_blit_area(v,s,sx,sy,d,dx,dy,w,h,m) : c_blit_area(v,s,sx,sy,d,dx,dy,w,h,m);
 }
 static long CDECL me_mouse(Workstation *w,long x,long y,Mouse *m)
-{ me_render_cache(); return c_mouse_draw(w,x,y,m); }
+{ me_render_cache(); return pixel_depth==32 ? c32_mouse_draw(w,x,y,m) : c_mouse_draw(w,x,y,m); }
 
 static char const r_16[] = { 5, 11, 12, 13, 14, 15 };
 static char const g_16[] = { 6,  5,  6,  7,  8,  9, 10 };
@@ -113,11 +115,22 @@ static char const genlock[] = { 0 };
 static char const unused[] = { 1, 5 };
 #endif
 
-static Mode const mode[1] = {
-    { 16, CHUNKY | TRUE_COLOUR, { r_16, g_16, b_16, none, none, none }, 0, 2, 2, 1 }
+static char const r_32[]={8,16,17,18,19,20,21,22,23};
+static char const g_32[]={8,8,9,10,11,12,13,14,15};
+static char const b_32[]={8,0,1,2,3,4,5,6,7};
+static char const unused_32[]={8,24,25,26,27,28,29,30,31};
+static Mode const mode[2] = {
+    { 16, CHUNKY | TRUE_COLOUR, { r_16, g_16, b_16, none, none, none }, 0, 2, 2, 1 },
+    { 32, CHUNKY | TRUE_COLOUR, { r_32, g_32, b_32, none, none, unused_32 }, 0, 2, 2, 1 }
 };
 
-char driver_name[] = "A2560Me RGB565 DDR3";
+char driver_name[] = "A2560Me RGB565/RGB888 DDR3";
+static long CDECL me_get_colour(Virtual *v,long c)
+{ return pixel_depth==32 ? c32_get_colour(v,c) : c_get_colour(v,c); }
+static void CDECL me_get_colours(Virtual *v,long c,unsigned long *f,unsigned long *b)
+{ if(pixel_depth==32) c32_get_colours(v,c,f,b); else c_get_colours(v,c,f,b); }
+static void CDECL me_set_colours(Virtual *v,long s,long n,unsigned short *r,Colour p[])
+{ if(pixel_depth==32) c32_set_colours(v,s,n,r,p); else c_set_colours(v,s,n,r,p); }
 
 long CDECL (*write_pixel_r)(Virtual *vwk, MFDB *mfdb, long x, long y, long colour) = me_write_pixel;
 long CDECL (*read_pixel_r)(Virtual *vwk, MFDB *mfdb, long x, long y) = me_read_pixel;
@@ -129,9 +142,9 @@ long CDECL (*blit_area_r)(Virtual *vwk, MFDB *src, long src_x, long src_y, MFDB 
 long CDECL (*text_area_r)(Virtual *vwk, short *text, long length, long dst_x, long dst_y, short *offsets) = 0;
 long CDECL (*mouse_draw_r)(Workstation *wk, long x, long y, Mouse *mouse) = me_mouse;
 
-long CDECL (*get_colour_r)(Virtual *vwk, long colour) = c_get_colour;
-void CDECL (*get_colours_r)(Virtual *vwk, long colour, unsigned long *foreground, unsigned long *background) = 0;
-void CDECL (*set_colours_r)(Virtual *vwk, long start, long entries, unsigned short *requested, Colour palette[]) = c_set_colours;
+long CDECL (*get_colour_r)(Virtual *vwk, long colour) = me_get_colour;
+void CDECL (*get_colours_r)(Virtual *vwk, long colour, unsigned long *foreground, unsigned long *background) = me_get_colours;
+void CDECL (*set_colours_r)(Virtual *vwk, long start, long entries, unsigned short *requested, Colour palette[]) = me_set_colours;
 
 long wk_extend = 0;
 short accel_s = 0;
@@ -160,6 +173,9 @@ static long validate_video(void)
 long check_token(char *token, const char **ptr)
 {
     (void)ptr;
+    if(!video_state.active && access->funcs.equal(token,"rgb24")) {
+        pixel_depth=32; graphics_mode=&mode[1]; return 1;
+    }
     if (!video_state.active && access->funcs.equal(token, "half"))
     {
         half_mode = 1;
@@ -179,11 +195,11 @@ static void describe_screen(Workstation *wk)
     wk->screen.mfdb.width = half_mode ? 640 : 1280;
     wk->screen.mfdb.height = timing_height ?
         (half_mode ? timing_height / 2 : timing_height) : (short)me_height(half_mode);
-    wk->screen.mfdb.bitplanes = 16;
+    wk->screen.mfdb.bitplanes = pixel_depth;
     wk->screen.mfdb.wdwidth = wk->screen.mfdb.width / 16;
     wk->screen.mfdb.address = (void *)A2560ME_VIDEO_BASE;
     wk->screen.mfdb.standard = 0;
-    wk->screen.wrap = wk->screen.mfdb.width * 2;
+    wk->screen.wrap = wk->screen.mfdb.width * (pixel_depth/8);
     wk->screen.shadow.buffer = 0;
     wk->screen.shadow.address = 0;
     wk->screen.shadow.wrap = 0;
@@ -225,11 +241,12 @@ long CDECL initialize(Virtual *vwk)
     describe_screen(wk);
     wk->screen.pixel.width = 264;  /* approximately 96 dpi */
     wk->screen.pixel.height = 264;
-    c_initialize_palette(vwk, 0, 256, default_vdi_colors, palette);
+    if(pixel_depth==32) c32_initialize_palette(vwk,0,256,default_vdi_colors,palette);
+    else c_initialize_palette(vwk, 0, 256, default_vdi_colors, palette);
     wk->mouse.position.x = wk->screen.mfdb.width / 2;
     wk->mouse.position.y = wk->screen.mfdb.height / 2;
     board_ready = 1;
-    access->funcs.puts("A2560Me fVDI: RGB565 in reserved DDR3; write-through CPU cache + VDMA copy/fill.\r\n");
+    access->funcs.puts("A2560Me fVDI: RGB565/RGB888 in reserved DDR3; write-through CPU cache + VDMA copy/fill.\r\n");
     return 1;
 }
 
@@ -249,7 +266,7 @@ Virtual *CDECL opnwk(Virtual *vwk)
     if (board_ready)
     {
         describe_screen(me->default_vwk->real_address);
-        if (me_video_enter_timing(&video_state, half_mode, timing_height))
+        if (me_video_enter_format(&video_state, half_mode, timing_height, pixel_depth))
             {
             video_state.cache = initial_cache;
             me_render_cache();

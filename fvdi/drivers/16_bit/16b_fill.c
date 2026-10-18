@@ -15,7 +15,9 @@
 #include "driver.h"
 #include "../bitplane/bitplane.h"
 
-#define PIXEL		short
+#ifndef PIXEL
+#define PIXEL short
+#endif
 #define PIXEL_SIZE	sizeof(PIXEL)
 #define PIXEL_32    long
 
@@ -541,9 +543,9 @@ long CDECL c_fill_area(Virtual *vwk, long x, long y, long w, long h,
 
     wk = vwk->real_address;
 
-    pos = (short)y * (long)wk->screen.wrap + x * 2;
-    addr = wk->screen.mfdb.address;
-    line_add = (wk->screen.wrap - w * 2) >> 1;
+    pos = (short)y * (long)wk->screen.wrap + x * PIXEL_SIZE;
+    addr = (PIXEL *)wk->screen.mfdb.address;
+    line_add = (wk->screen.wrap - w * PIXEL_SIZE) / PIXEL_SIZE;
 
 #ifdef BOTH
     if ((addr_fast = wk->screen.shadow.address) != 0) {

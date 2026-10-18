@@ -15,7 +15,9 @@
 #include "driver.h"
 #include "../bitplane/bitplane.h"
 
-#define PIXEL		short
+#ifndef PIXEL
+#define PIXEL short
+#endif
 #define PIXEL_SIZE	sizeof(PIXEL)
 #define PIXEL_32    long
 
@@ -191,7 +193,7 @@ static void s_line_xor(PIXEL *addr, PIXEL *addr_fast, int count,
                 int d, int incrE, int incrNE, int one_step, int both_step,
                 PIXEL foreground, PIXEL background)
 {
-    int v;
+    PIXEL v;
 
     (void) addr_fast;
     (void) foreground;
@@ -236,7 +238,7 @@ static void s_line_xor_p(PIXEL *addr, PIXEL *addr_fast, long pattern, int count,
                   int d, int incrE, int incrNE, int one_step, int both_step,
                   PIXEL foreground, PIXEL background)
 {
-    int v;
+    PIXEL v;
     unsigned short mask = 0x8000;
 
     (void) addr_fast;
@@ -533,7 +535,7 @@ static void line_xor(PIXEL *addr, PIXEL *addr_fast, int count,
                 int d, int incrE, int incrNE, int one_step, int both_step,
                 PIXEL foreground, PIXEL background)
 {
-    int v;
+    PIXEL v;
 
     (void) addr_fast;
     (void) foreground;
@@ -578,7 +580,7 @@ static void line_xor_p(PIXEL *addr, PIXEL *addr_fast, long pattern, int count,
                   int d, int incrE, int incrNE, int one_step, int both_step,
                   PIXEL foreground, PIXEL background)
 {
-    int v;
+    PIXEL v;
     unsigned short mask = 0x8000;
 
     (void) addr_fast;
@@ -731,9 +733,9 @@ long CDECL c_line_draw(Virtual *vwk, long x1, long y1, long x2, long y2,
 
     wk = vwk->real_address;
 
-    pos = (short)y1 * (long)wk->screen.wrap + x1 * 2;
-    addr = wk->screen.mfdb.address;
-    line_add = wk->screen.wrap >> 1;
+    pos = (short)y1 * (long)wk->screen.wrap + x1 * PIXEL_SIZE;
+    addr = (PIXEL *)wk->screen.mfdb.address;
+    line_add = wk->screen.wrap / PIXEL_SIZE;
 
 
     x_step = 1;
@@ -768,8 +770,8 @@ long CDECL c_line_draw(Virtual *vwk, long x1, long y1, long x2, long y2,
 #ifdef BOTH
     if ((addr_fast = wk->screen.shadow.address) != 0) {
 
-        addr += pos >> 1;
-        addr_fast += pos >> 1;
+        addr += pos / PIXEL_SIZE;
+        addr_fast += pos / PIXEL_SIZE;
         if ((pattern & 0xffff) == 0xffff) {
             switch (mode) {
             case 1:             /* Replace */
@@ -804,7 +806,7 @@ long CDECL c_line_draw(Virtual *vwk, long x1, long y1, long x2, long y2,
     } else
 #endif
     {
-        addr += pos >> 1;
+        addr += pos / PIXEL_SIZE;
         if ((pattern & 0xffff) == 0xffff) {
             switch (mode) {
             case 1:             /* Replace */

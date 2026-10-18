@@ -80,6 +80,18 @@ int main(void) {
     assert(ME_R32(ME_GUI)==5 && ME_R32(ME_GUI+12)==1280);
     me_video_leave(&state);
     assert(!(ME_R32(ME_MASTER)&ME_VIDEO1024));
+    for(unsigned half=0;half<2;half++) for(unsigned height=960;height<=1024;height+=64) {
+        for(i=0;i<sizeof mock_pixels/sizeof mock_pixels[0];i++) mock_pixels[i]=0xdeadbeef;
+        assert(me_video_enter_format(&state,half,height,32));
+        assert(ME_R32(ME_GUI)==(half?7:15));
+        assert(ME_R32(ME_GUI+12)==(half?2560:5120));
+        n=(half?640:1280)*(half?height/2:height);
+        for(i=0;i<n;i++) assert(mock_pixels[i]==0);
+        assert(mock_pixels[n]==0xdeadbeef);
+        me_video_leave(&state);
+    }
+    assert(!me_video_enter_format(&state,0,960,24));
+    puts("PASS: RGB888 modes, 32-bit stride and framebuffer clear bounds");
     puts("PASS: explicit 960/1024 timing selection and restoration");
     puts("PASS: DDR reservation, endian/GGE guards, RGB565 mode/byte address/stride, clear bounds, cache and monochrome restoration");
     return 0;

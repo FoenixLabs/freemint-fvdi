@@ -31,7 +31,8 @@ CSRC = \
 	init.c \
 	colours.c \
 	printf.c \
-	a2560me.c
+	a2560me.c \
+	rgb24.c
 
 # handle DevPac -> gas conversions
 # defines SSRC_GNU and SINCSRC_GNU variables

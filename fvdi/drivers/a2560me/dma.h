@@ -17,14 +17,14 @@
 #define ME_DMA_POLLS 200000UL
 struct me_dma_rect { uint32_t address, stride, width, height; };
 
-static int me_dma_valid(const struct me_dma_rect *r)
+static int me_dma_valid_depth(const struct me_dma_rect *r, uint32_t pixelbytes)
 {
     uint32_t line, last;
-    if (!r->width || !r->height || r->width > 65535UL || r->height > 65535UL ||
-        (r->address & 1) || (r->stride & 1) || r->address < A2560ME_DDR_BASE ||
+    if ((pixelbytes != 2 && pixelbytes != 4) || !r->width || !r->height || r->width > 65535UL || r->height > 65535UL ||
+        (r->address & (pixelbytes-1)) || (r->stride & (pixelbytes-1)) || r->address < A2560ME_DDR_BASE ||
         r->address >= A2560ME_DDR_TOP)
         return 0;
-    line = r->width * 2;
+    line = r->width * pixelbytes;
     if (r->stride < line || r->stride > A2560ME_DDR_TOP ||
         r->height - 1 > (A2560ME_DDR_TOP - r->address) / r->stride)
         return 0;
@@ -36,14 +36,15 @@ static int me_dma_valid(const struct me_dma_rect *r)
  * Copy/fill are idempotent except overlapping copies, so never replay a
  * failed operation through the CPU: it may have already moved segments.
  */
-static int me_dma_run(const struct me_dma_rect *src,
-    const struct me_dma_rect *dst, uint16_t colour)
+static int me_dma_run_depth(const struct me_dma_rect *src,
+    const struct me_dma_rect *dst, uint32_t colour, uint32_t pixelbytes)
 {
     uint32_t ctrl = 0x1f0UL, sa = 0, ss = 0, da, ds, n, status;
     uint16_t sr;
-    if (!me_dma_valid(dst) || (src && (!me_dma_valid(src) ||
+    if (!me_dma_valid_depth(dst,pixelbytes) || (src && (!me_dma_valid_depth(src,pixelbytes) ||
         src->width != dst->width || src->height != dst->height)))
         return 0;
+    if (pixelbytes == 4) ctrl = (ctrl & ~0x300UL) | 0x200UL;
     sr = me_dma_lock();
     if (ME_DMA_R(4) & 1)
     {
@@ -58,7 +59,7 @@ static int me_dma_run(const struct me_dma_rect *src,
         /* Overlap-safe for identical raster layout. With different wraps,
          * leave potentially overlapping buffers to the generic renderer. */
         if (sa != da && sa < da &&
-            da < sa + (src->height - 1) * ss + src->width * 2)
+            da < sa + (src->height - 1) * ss + src->width * pixelbytes)
         {
             if (ss != ds)
             {
@@ -99,4 +100,9 @@ static int me_dma_run(const struct me_dma_rect *src,
     me_dma_unlock(sr);
     return 1;
 }
+static int __attribute__((unused)) me_dma_valid(const struct me_dma_rect *r)
+{ return me_dma_valid_depth(r,2); }
+static int __attribute__((unused)) me_dma_run(const struct me_dma_rect *src,
+    const struct me_dma_rect *dst,uint16_t colour)
+{ return me_dma_run_depth(src,dst,colour,2); }
 #endif

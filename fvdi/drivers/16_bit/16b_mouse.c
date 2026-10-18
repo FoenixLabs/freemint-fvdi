@@ -14,7 +14,9 @@
 #include "driver.h"
 #include "../bitplane/bitplane.h"
 
-#define PIXEL       short
+#ifndef PIXEL
+#define PIXEL short
+#endif
 #define PIXEL_SIZE  sizeof(PIXEL)
 
 static unsigned long mouse_save_state = 0;

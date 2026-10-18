@@ -15,7 +15,9 @@
 #include "driver.h"
 #include "../bitplane/bitplane.h"
 
-#define PIXEL		short
+#ifndef PIXEL
+#define PIXEL short
+#endif
 #define PIXEL_SIZE	sizeof(PIXEL)
 
 
@@ -103,7 +105,8 @@ static void s_transparent(short *src_addr, int src_line_add, PIXEL *dst_addr, PI
 
 static void s_xor(short *src_addr, int src_line_add, PIXEL *dst_addr, PIXEL *dst_addr_fast, int dst_line_add, int x, int w, int h, PIXEL foreground, PIXEL background)
 {
-    int i, j, v;
+    int i, j;
+    PIXEL v;
     unsigned int expand_word, mask;
 
     (void) foreground;
@@ -264,7 +267,8 @@ static void transparent(short *src_addr, int src_line_add, PIXEL *dst_addr, PIXE
 
 static void xor(short *src_addr, int src_line_add, PIXEL *dst_addr, PIXEL *dst_addr_fast, int dst_line_add, int x, int w, int h, PIXEL foreground, PIXEL background)
 {
-    int i, j, v;
+    int i, j;
+    PIXEL v;
     unsigned int expand_word, mask;
 
     (void) dst_addr_fast;
@@ -349,7 +353,8 @@ static void revtransp(short *src_addr, int src_line_add, PIXEL *dst_addr, PIXEL 
 long CDECL c_expand_area(Virtual *vwk, MFDB *src, long src_x, long src_y, MFDB *dst, long dst_x, long dst_y, long w, long h, long operation, long colour)
 {
     Workstation *wk;
-    PIXEL *src_addr, *dst_addr, *dst_addr_fast;
+    short *src_addr;
+    PIXEL *dst_addr, *dst_addr_fast;
     unsigned long foreground, background;
     int src_wrap, dst_wrap;
     int src_line_add, dst_line_add;
@@ -368,11 +373,11 @@ long CDECL c_expand_area(Virtual *vwk, MFDB *src, long src_x, long src_y, MFDB *
     to_screen = 0;
     if (!dst || !dst->address || (dst->address == wk->screen.mfdb.address)) {       /* To screen? */
         dst_wrap = wk->screen.wrap;
-        dst_addr = wk->screen.mfdb.address;
+        dst_addr = (PIXEL *)wk->screen.mfdb.address;
         to_screen = 1;
     } else {
         dst_wrap = (long)dst->wdwidth * 2 * dst->bitplanes;
-        dst_addr = dst->address;
+        dst_addr = (PIXEL *)dst->address;
     }
     dst_pos = (short)dst_y * (long)dst_wrap + dst_x * PIXEL_SIZE;
     dst_line_add = dst_wrap - w * PIXEL_SIZE;
@@ -382,7 +387,7 @@ long CDECL c_expand_area(Virtual *vwk, MFDB *src, long src_x, long src_y, MFDB *
     src_line_add /= 2;
     dst_line_add /= PIXEL_SIZE;         /* Change into pixel count */
 
-    dst_addr_fast = wk->screen.shadow.address;  /* May not really be to screen at all, but... */
+    dst_addr_fast = (PIXEL *)wk->screen.shadow.address;  /* May not really be to screen at all, but... */
 
 #ifdef BOTH
     if (!to_screen || !dst_addr_fast) {
