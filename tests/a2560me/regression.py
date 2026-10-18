@@ -70,6 +70,17 @@ int main(void) {
     assert(me_video_enter(&state,1));
     assert(ME_R32(ME_GUI)==5 && ME_R32(ME_GUI+12)==1280);
     me_video_leave(&state);
+    assert(me_video_enter_timing(&state,0,960));
+    assert(me_height(0)==960 && !(ME_R32(ME_MASTER)&ME_VIDEO1024));
+    me_video_leave(&state);
+    assert(ME_R32(ME_MASTER)&ME_VIDEO1024);
+    regs[0] &= ~ME_VIDEO1024;
+    assert(me_video_enter_timing(&state,1,1024));
+    assert(me_height(0)==1024 && me_height(1)==512);
+    assert(ME_R32(ME_GUI)==5 && ME_R32(ME_GUI+12)==1280);
+    me_video_leave(&state);
+    assert(!(ME_R32(ME_MASTER)&ME_VIDEO1024));
+    puts("PASS: explicit 960/1024 timing selection and restoration");
     puts("PASS: DDR reservation, endian/GGE guards, RGB565 mode/byte address/stride, clear bounds, cache and monochrome restoration");
     return 0;
 }

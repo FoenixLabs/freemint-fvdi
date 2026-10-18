@@ -145,6 +145,7 @@ short no_restore = 0;
 
 static struct me_video_state video_state;
 static short half_mode;
+static short timing_height;
 static short board_ready;
 static uint32_t initial_cache, initial_dtt0, initial_dtt1;
 
@@ -164,13 +165,20 @@ long check_token(char *token, const char **ptr)
         half_mode = 1;
         return 1;
     }
+    if (!video_state.active && (access->funcs.equal(token, "960") ||
+        access->funcs.equal(token, "1024")))
+    {
+        timing_height = access->funcs.equal(token, "1024") ? 1024 : 960;
+        return 1;
+    }
     return 0;
 }
 
 static void describe_screen(Workstation *wk)
 {
     wk->screen.mfdb.width = half_mode ? 640 : 1280;
-    wk->screen.mfdb.height = me_height(half_mode);
+    wk->screen.mfdb.height = timing_height ?
+        (half_mode ? timing_height / 2 : timing_height) : (short)me_height(half_mode);
     wk->screen.mfdb.bitplanes = 16;
     wk->screen.mfdb.wdwidth = wk->screen.mfdb.width / 16;
     wk->screen.mfdb.address = (void *)A2560ME_VIDEO_BASE;
@@ -241,7 +249,7 @@ Virtual *CDECL opnwk(Virtual *vwk)
     if (board_ready)
     {
         describe_screen(me->default_vwk->real_address);
-        if (me_video_enter(&video_state, half_mode))
+        if (me_video_enter_timing(&video_state, half_mode, timing_height))
             {
             video_state.cache = initial_cache;
             me_render_cache();

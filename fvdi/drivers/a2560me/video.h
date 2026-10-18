@@ -47,7 +47,7 @@ static int me_video_available(void)
     return !(ME_R32(ME_GAVIN) & 0x40UL) && !(ME_R32(ME_GGE) & 1UL);
 }
 
-static int me_video_enter(struct me_video_state *s, unsigned short half)
+static int me_video_enter_timing(struct me_video_state *s, unsigned short half, unsigned short height)
 {
     volatile uint32_t *pixels;
     uint32_t count;
@@ -64,6 +64,10 @@ static int me_video_enter(struct me_video_state *s, unsigned short half)
     s->gui_stride = ME_R32(ME_GUI + 12);
     s->mono_bg = ME_R32(ME_GUI + 16);
     s->cache = me_disable_dcache();
+    /* FPGA build 84+ reprograms HDMI automatically when timing changes. */
+    if (height == 960 || height == 1024)
+        ME_R32(ME_MASTER) = (s->master & ~ME_VIDEO1024) |
+            (height == 1024 ? ME_VIDEO1024 : 0);
     pixels = ME_PIXELS;
     count = (uint32_t)(half ? 640 : 1280) * me_height(half) / 2;
     while (count--)
@@ -75,10 +79,16 @@ static int me_video_enter(struct me_video_state *s, unsigned short half)
     ME_R16(ME_MOUSE) = s->mouse & ~1U;
     ME_R32(ME_BORDER) = 0;
     ME_R32(ME_GUI) = half ? 5 : 13; /* enabled, RGB565, 640 or 1280 */
-    ME_R32(ME_MASTER) = (s->master & ~(ME_TOSGRAPH | ME_MEMTEXT |
+    ME_R32(ME_MASTER) = (ME_R32(ME_MASTER) & ~(ME_TOSGRAPH | ME_MEMTEXT |
         0x00001403UL)) | ME_GRAPHICS;
     s->active = 1;
     return 1;
+}
+
+/* Keep the existing automatic-timing interface for probes and recovery. */
+static int __attribute__((unused)) me_video_enter(struct me_video_state *s, unsigned short half)
+{
+    return me_video_enter_timing(s, half, 0);
 }
 
 static void me_video_leave(struct me_video_state *s)
